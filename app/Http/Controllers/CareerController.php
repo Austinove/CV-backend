@@ -35,6 +35,9 @@ class CareerController extends Controller
      */
     public function store(Request $request)
     {
+        $request->endDate != "" ?
+        $end_time = date('Y-m-d', strtotime($request->endDate)):
+        $end_time = null;
         $createCareer = Career::create([
             "person_id" => $request->user_id, 
             "company" => $request->company,
@@ -42,7 +45,7 @@ class CareerController extends Controller
             "job_intro" => $request->jobIntro,
             "job_desc" => $request->jobDesc,
             "start_date" => date('Y-m-d', strtotime($request->startDate)),
-            "end_date" => date('Y-m-d', strtotime($request->endDate)),
+            "end_date" => $end_time,
         ]);
         return Career::where(["person_id" => $request->user_id ])->get();
     }
@@ -79,13 +82,16 @@ class CareerController extends Controller
     public function update(Request $request)
     {
         $update_career = Career::find($request->id);
+        $request->endDate != "" ?
+        $end_time = date('Y-m-d', strtotime($request->endDate)):
+        $end_time = null;
         $update_career->update([
             "company" => $request->company,
             "job_title" => $request->jobTitle,
             "job_intro" => $request->jobIntro,
             "job_desc" => $request->jobDesc,
             "start_date" => date('Y-m-d', strtotime($request->startDate)),
-            "end_date" => date('Y-m-d', strtotime($request->endDate)),
+            "end_date" => $end_time,
         ]);
         return Career::where(["person_id" => $update_career->person_id ])->get();
     }
