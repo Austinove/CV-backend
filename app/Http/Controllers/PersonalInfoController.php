@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\PersonalInfo;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+use Illuminate\Support\Facades\File;
 
 class PersonalInfoController extends Controller
 {
@@ -89,6 +92,7 @@ class PersonalInfoController extends Controller
                     "email" => $request->email,
                     "mob_number" => $request->mobNumber,
                     "dob" => date('Y-m-d', strtotime($request->dob)),
+                    "lang" => $request->lang,
                 ]);
                 return $createUser;
             }
@@ -113,9 +117,8 @@ class PersonalInfoController extends Controller
         return $update_info;
     }
 
-    public function generate(){
-        $this->send_email();
-        $userInfo = PersonalInfo::with('education', 'career', 'project', 'referee')->find(4);
+    public function generate(Request $request){
+        $userInfo = PersonalInfo::with('education', 'career', 'project', 'referee')->find($request->person_id);
         $path = public_path('clients/');
         $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template.docx'));
         $templateProcessor->setImageValue('UserLogo', array('path' => $path.$userInfo->image, 'width' => 100, 'height' => 100, 'ratio' => false));
@@ -188,8 +191,14 @@ class PersonalInfoController extends Controller
             ]);
         }
         $templateProcessor->cloneBlock('project', 0, true, false, $projects_block);
-
         $file_name = strtolower(str_replace(" ","_",$userInfo->full_names)).'_cv_'.$userInfo->id.'.docx';
+
+        //delete file if exists
+        if (file_exists(public_path('cvs/'.$file_name))) {
+            File::delete('cvs/' . $file_name);
+        }
+
+        //saving file
         $file_full_path = public_path('cvs/'.$file_name);
         try {
             $templateProcessor->saveAs($file_full_path);
@@ -203,59 +212,55 @@ class PersonalInfoController extends Controller
             ], 200);
     }
 
-    public function send_email() {
-        // // Recipient
-        // $to = "bryanovicaustenove@gmail.com"; 
-        
-        // // Sender 
-        // $from = "brian.kulaba@auto-hoevel.de";
-        // $fromName = "Bryan";
-
-        // // Email subject
-        // $subject = 'This is a test';
-
-        // // Attachment file
-        // $file = public_path('cvs/kulaba_brian_cv_4.docx');
-
-        // // Email body content
-        // $htmlContent = ' 
-        //     <h3>This is a test</h3> 
-        //     <p>This is a test PHP email with and attachment.</p> 
-        // ';
-
-        // // Header for sender info
-        // $headers = "From: $fromName" . " <" . $from . ">";
-
-        // // Boundary
-        // $semi_rand = md5(time());
-        // $mime_boundary = "==Multipart_Boundary_x{$semi_rand}x";
-
-        // // Headers for attachment
-        // $headers .= "\nMIME-Version: 1.0\n" . "Content-Type: multipart/mixed;\n" . " boundary=\"{$mime_boundary}\"";
-
-        // // Multipart boundary
-        // $message = "--{$mime_boundary}\n" . "Content-Type: text/html; charset=\"UTF-8\"\n" . "Content-Transfer-Encoding: 7bit\n\n" . $htmlContent . "\n\n";
-
-        // // Preparing attachment
-        // if (!empty($file) > 0)
-        // {
-        //     if (is_file($file))
-        //     {
-        //         $message .= "--{$mime_boundary}\n";
-        //         $fp = fopen($file, "rb");
-        //         $data = fread($fp, filesize($file));
-
-        //         fclose($fp);
-        //         $data = chunk_split(base64_encode($data));
-        //         $message .= "Content-Type: application/octet-stream; name=\"" . basename($file) . "\"\n" . "Content-Description: " . basename($file) . "\n" . "Content-Disposition: attachment;\n" . " filename=\"" . basename($file) . "\"; size=" . filesize($file) . ";\n" . "Content-Transfer-Encoding: base64\n\n" . $data . "\n\n";
-        //     }
-        // }
-        // $message .= "--{$mime_boundary}--";
-        // $returnpath = "-f" . $from;
-
-        // // Send email
-        // $mail = mail($to, $subject, $message, $headers, $returnpath);
-    }
+    // public function send_email() {
+    //     require base_path("vendor/autoload.php");
+    //     $mail = new PHPMailer(true);     // Passing `true` enables exceptions
+ 
+    //     try {
+ 
+    //         // Email server settings
+    //         $mail->SMTPDebug = SMTP::DEBUG_SERVER;
+    //         $mail->isSMTP();
+    //         $mail->Host = 'academicmasterug.com';             //  smtp host
+    //         $mail->SMTPAuth = true;
+    //         $mail->Username ='';   //  sender username
+    //         $mail->Password = '';       // sender password
+    //         $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;                  // encryption - ssl/tls
+    //         $mail->Port = 456;                          // port - 587/465
+ 
+    //         $mail->setFrom('', 'Bryan');
+    //         $mail->addAddress('bryanovicaustenove@gmail.com');
+    //         // $mail->addCC($request->emailCc);
+    //         // $mail->addBCC($request->emailBcc);
+ 
+    //         $mail->addReplyTo('kbryan@academicmasterug.com', 'Bryan');
+ 
+    //         // if(isset($_FILES['emailAttachments'])) {
+    //         //     for ($i=0; $i < count($_FILES['emailAttachments']['tmp_name']); $i++) {
+    //         //         $mail->addAttachment($_FILES['emailAttachments']['tmp_name'][$i], $_FILES['emailAttachments']['name'][$i]);
+    //         //     }
+    //         // }
+ 
+ 
+    //         $mail->isHTML(true);                // Set email content format to HTML
+ 
+    //         $mail->Subject = "Testing Email server";
+    //         $mail->Body    = "This is for testing email server";
+ 
+    //         // $mail->AltBody = plain text version of email body;
+ 
+    //         if( !$mail->send() ) {
+    //             return $mail->ErrorInfo;
+    //         }
+            
+    //         else {
+    //             return "Email has been sent.";
+    //         }
+ 
+    //     } catch (Exception $e) {
+    //         return 'Message could not be sent.';
+    //     }
+    // }
 
     /**
      * Display the specified resource.
