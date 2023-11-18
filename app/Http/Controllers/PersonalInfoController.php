@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\PersonalInfo;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+use Illuminate\Support\Facades\File;
 
 class PersonalInfoController extends Controller
 {
@@ -88,6 +92,7 @@ class PersonalInfoController extends Controller
                     "email" => $request->email,
                     "mob_number" => $request->mobNumber,
                     "dob" => date('Y-m-d', strtotime($request->dob)),
+                    "lang" => $request->lang,
                 ]);
                 return $createUser;
             }
@@ -110,12 +115,168 @@ class PersonalInfoController extends Controller
             "image" => $saveName,
         ]);
         return $update_info;
-        try {
-            return response()->json(["msg" => "Student Saved Successfully"], 200);
-        } catch (QueryException $th) {
-            throw $th;
-        }
     }
+
+    public function generate(Request $request){
+        $userInfo = PersonalInfo::with("education", "career", "project", "referee", "section")->find($request->person_id);
+        $path = public_path('clients/');
+        switch ($userInfo->lang) {
+            case 'en':
+                $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_en.docx'));
+                break;
+                
+            case 'de':
+               $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_de.docx'));
+                break;
+            
+            default:
+                $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_en.docx'));
+                break;
+        }
+        $templateProcessor->setImageValue('UserLogo', array('path' => $path.$userInfo->image));
+        //entering assigning details of user
+        $templateProcessor->setValue('fullnames', $userInfo->full_names);
+        $templateProcessor->setValue('introduction', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->statement));
+        $templateProcessor->setValue('email', $userInfo->email);
+        $templateProcessor->setValue('contact', $userInfo->mob_number);
+        $templateProcessor->setValue('location', $userInfo->address);
+        $templateProcessor->setValue('dob', $userInfo->dob);
+        $templateProcessor->setValue('skills', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->skills));
+
+        //setting up referees
+        $replacements = array();
+        foreach ($userInfo->referee as $key => $referee_details) {
+            array_push($replacements, [
+                'referee_name' => $referee_details->name.', '.$referee_details->title, 
+                'referee_company' => $referee_details->company,
+                'referee_contacts' => $referee_details->number.', '.$referee_details->email,
+                'referee_spacer' => ''
+            ]);
+        }
+        $templateProcessor->cloneBlock('referee', 0, true, false, $replacements);
+
+        //setting up education
+        $education_block = array();
+        foreach ($userInfo->education as $key => $education_details) {
+            $start_date = new Carbon($education_details->start_date);
+            $end_date = new Carbon($education_details->end_date);
+            array_push($education_block, [
+                'school' => $education_details->school.',     '.$start_date->format('M Y').' - '.$end_date->format('M Y'), 
+                'schoolcourse' => $education_details->qualification,
+                'schoolgrade' => $education_details->grade,
+                'schoolspacer' => ''
+            ]);
+        }
+        $templateProcessor->cloneBlock('education', 0, true, false, $education_block);
+
+        //setting up experience
+        $experience_block = array();
+        foreach ($userInfo->career as $key => $career_details) {
+            $start_date = new Carbon($career_details->start_date);
+            if($career_details->end_date == '') {
+                $end_date = 'Current';
+            } else {
+                $date = new Carbon($career_details->end_date);
+                $end_date = $date->format('M Y');
+            }
+            array_push($experience_block, [
+                'emptitle' => $career_details->job_title, 
+                'empdate' => $start_date->format('M Y').' - '.$end_date,
+                'empintr' => $career_details->empintr,
+                'empdesc' => str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">',$career_details->job_desc ),
+                'empspacer' => ''
+            ]);
+        }
+        $templateProcessor->cloneBlock('work', 0, true, false, $experience_block);
+
+        //setting up projects
+        $projects_block = array();
+        foreach ($userInfo->project as $key => $project_detail) {
+            $start_date = new Carbon($project_detail->start_date);
+            $end_date = new Carbon($project_detail->end_date);
+            array_push($projects_block, [
+                'projtitle' => $project_detail->project_title, 
+                'projdate' => $start_date->format('M Y').' - '.$end_date->format('M Y'),
+                'projdesc' => str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $project_detail->project_desc),
+                'projspacer' => ''
+            ]);
+        }
+        $templateProcessor->cloneBlock('project', 0, true, false, $projects_block);
+
+        //setting up other sections
+        $templateProcessor->setValue('section_title', $userInfo->section_title);
+        $templateProcessor->setValue('section_desc', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->section_desc));
+
+        $file_name = strtolower(str_replace(" ","_",$userInfo->full_names)).'_cv_'.$userInfo->id.'.docx';
+
+        //delete file if exists
+        if (file_exists(public_path('cvs/'.$file_name))) {
+            File::delete('cvs/' . $file_name);
+        }
+
+        //saving file
+        $file_full_path = public_path('cvs/'.$file_name);
+        try {
+            $templateProcessor->saveAs($file_full_path);
+        } catch (Exception $e) {
+            return $e;
+        }
+        return response()->json(
+            [
+                "msg" => "Document Saved Successfully", 
+                "status" => 200
+            ], 200);
+    }
+
+    // public function send_email() {
+    //     require base_path("vendor/autoload.php");
+    //     $mail = new PHPMailer(true);     // Passing `true` enables exceptions
+ 
+    //     try {
+ 
+    //         // Email server settings
+    //         $mail->SMTPDebug = SMTP::DEBUG_SERVER;
+    //         $mail->isSMTP();
+    //         $mail->Host = 'academicmasterug.com';             //  smtp host
+    //         $mail->SMTPAuth = true;
+    //         $mail->Username ='';   //  sender username
+    //         $mail->Password = '';       // sender password
+    //         $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;                  // encryption - ssl/tls
+    //         $mail->Port = 456;                          // port - 587/465
+ 
+    //         $mail->setFrom('', 'Bryan');
+    //         $mail->addAddress('bryanovicaustenove@gmail.com');
+    //         // $mail->addCC($request->emailCc);
+    //         // $mail->addBCC($request->emailBcc);
+ 
+    //         $mail->addReplyTo('kbryan@academicmasterug.com', 'Bryan');
+ 
+    //         // if(isset($_FILES['emailAttachments'])) {
+    //         //     for ($i=0; $i < count($_FILES['emailAttachments']['tmp_name']); $i++) {
+    //         //         $mail->addAttachment($_FILES['emailAttachments']['tmp_name'][$i], $_FILES['emailAttachments']['name'][$i]);
+    //         //     }
+    //         // }
+ 
+ 
+    //         $mail->isHTML(true);                // Set email content format to HTML
+ 
+    //         $mail->Subject = "Testing Email server";
+    //         $mail->Body    = "This is for testing email server";
+ 
+    //         // $mail->AltBody = plain text version of email body;
+ 
+    //         if( !$mail->send() ) {
+    //             return $mail->ErrorInfo;
+    //         }
+            
+    //         else {
+    //             return "Email has been sent.";
+    //         }
+ 
+    //     } catch (Exception $e) {
+    //         return 'Message could not be sent.';
+    //     }
+    // }
 
     /**
      * Display the specified resource.
