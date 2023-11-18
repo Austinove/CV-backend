@@ -21,4 +21,7 @@ class PersonalInfo extends Model
     public function referee() {
         return $this->hasMany(Referee::class, 'person_id', 'id');
     }
+    public function section() {
+        return $this->hasMany(Section::class, 'person_id', 'id');
+    }
 }

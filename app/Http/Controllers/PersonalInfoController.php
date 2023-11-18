@@ -118,18 +118,30 @@ class PersonalInfoController extends Controller
     }
 
     public function generate(Request $request){
-        $userInfo = PersonalInfo::with('education', 'career', 'project', 'referee')->find($request->person_id);
+        $userInfo = PersonalInfo::with("education", "career", "project", "referee", "section")->find($request->person_id);
         $path = public_path('clients/');
-        $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template.docx'));
-        $templateProcessor->setImageValue('UserLogo', array('path' => $path.$userInfo->image, 'width' => 100, 'height' => 100, 'ratio' => false));
+        switch ($userInfo->lang) {
+            case 'en':
+                $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_en.docx'));
+                break;
+                
+            case 'de':
+               $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_de.docx'));
+                break;
+            
+            default:
+                $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor(public_path('template/cv_template_en.docx'));
+                break;
+        }
+        $templateProcessor->setImageValue('UserLogo', array('path' => $path.$userInfo->image));
         //entering assigning details of user
         $templateProcessor->setValue('fullnames', $userInfo->full_names);
-        $templateProcessor->setValue('introduction', $userInfo->statement);
+        $templateProcessor->setValue('introduction', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->statement));
         $templateProcessor->setValue('email', $userInfo->email);
         $templateProcessor->setValue('contact', $userInfo->mob_number);
         $templateProcessor->setValue('location', $userInfo->address);
         $templateProcessor->setValue('dob', $userInfo->dob);
-        $templateProcessor->setValue('skills', $userInfo->skills);
+        $templateProcessor->setValue('skills', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->skills));
 
         //setting up referees
         $replacements = array();
@@ -171,8 +183,7 @@ class PersonalInfoController extends Controller
                 'emptitle' => $career_details->job_title, 
                 'empdate' => $start_date->format('M Y').' - '.$end_date,
                 'empintr' => $career_details->empintr,
-                'empdesc' => $career_details->job_desc,
-                'empdesc' => $career_details->job_desc,
+                'empdesc' => str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">',$career_details->job_desc ),
                 'empspacer' => ''
             ]);
         }
@@ -186,11 +197,16 @@ class PersonalInfoController extends Controller
             array_push($projects_block, [
                 'projtitle' => $project_detail->project_title, 
                 'projdate' => $start_date->format('M Y').' - '.$end_date->format('M Y'),
-                'projdesc' => $project_detail->project_desc,
+                'projdesc' => str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $project_detail->project_desc),
                 'projspacer' => ''
             ]);
         }
         $templateProcessor->cloneBlock('project', 0, true, false, $projects_block);
+
+        //setting up other sections
+        $templateProcessor->setValue('section_title', $userInfo->section_title);
+        $templateProcessor->setValue('section_desc', str_replace("\n", '</w:t><w:br/><w:t xml:space="preserve">', $userInfo->section_desc));
+
         $file_name = strtolower(str_replace(" ","_",$userInfo->full_names)).'_cv_'.$userInfo->id.'.docx';
 
         //delete file if exists

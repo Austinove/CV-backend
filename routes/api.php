@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PersonalInfoController;
 use App\Http\Controllers\EducationController;
 use App\Http\Controllers\CareerController;
+use App\Http\Controllers\SectionController;
 use App\Http\Controllers\ProjectDoneController;
 use App\Http\Controllers\RefereeController;
 use App\Http\Middleware\CheckStatus;
@@ -44,6 +45,12 @@ Route::middleware([CheckStatus::class])->group(function(){
     Route::post('/add_career', [CareerController::class, "store"]);
     Route::post('/edit_career', [CareerController::class, "update"]);
     Route::post('/delete_career', [CareerController::class, "destroy"]);
+
+    //section
+    Route::post('/section', [SectionController::class, "index"]);
+    Route::post('/add_section', [SectionController::class, "store"]);
+    Route::post('/edit_section', [SectionController::class, "update"]);
+    Route::post('/delete_section', [SectionController::class, "destroy"]);
 
     //project
     Route::post('/project', [ProjectDoneController::class, "index"]);
